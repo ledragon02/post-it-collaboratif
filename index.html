@@ -2,120 +2,194 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Tableau Collaboratif</title>
+    <title>Post-it Infini Pro</title>
     <style>
-        body { font-family: sans-serif; background: #dfe6e9; margin: 0; overflow: hidden; }
-        #plateau { width: 100vw; height: 100vh; position: relative; }
-        .postit { 
-            width: 150px; height: 150px; background: #ffeaa7; 
-            position: absolute; padding: 15px; box-shadow: 3px 3px 10px rgba(0,0,0,0.1);
-            cursor: grab; border: 1px solid #fab1a0; overflow: hidden;
-            outline: none; font-size: 14px; word-wrap: break-word;
+        body { font-family: sans-serif; background: #2c3e50; margin: 0; overflow: hidden; }
+        #viewport { width: 100vw; height: 100vh; position: relative; overflow: hidden; cursor: grab; }
+        #viewport:active { cursor: grabbing; }
+        #plateau { 
+            width: 10000px; height: 10000px; 
+            background-color: #dfe6e9;
+            background-image: radial-gradient(#bdc3c7 1px, transparent 1px);
+            background-size: 40px 40px;
+            position: absolute; transform-origin: 0 0; will-change: transform;
         }
-        .postit:active { cursor: grabbing; }
-        #infos { position: fixed; top: 10px; right: 10px; background: white; padding: 10px; border-radius: 5px; z-index: 10; border: 1px solid #ccc; }
-        .btn-add { position: fixed; top: 10px; left: 10px; padding: 10px 20px; z-index: 10; cursor: pointer; background: #2ecc71; color: white; border: none; border-radius: 4px; font-weight: bold; }
+        .postit { 
+            width: 150px; height: 150px; position: absolute; padding: 15px; 
+            box-shadow: 3px 3px 10px rgba(0,0,0,0.2); cursor: text; 
+            outline: none; font-size: 14px; white-space: pre-wrap;
+        }
+        .curseur {
+            position: absolute; width: 24px; height: 24px; border-radius: 50% 50% 50% 0; 
+            pointer-events: none; z-index: 1000; border: 2px solid white;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; color: white; font-weight: bold; transform: rotate(-45deg);
+        }
+        .curseur span { transform: rotate(45deg); }
+        #ui { position: fixed; top: 10px; left: 10px; z-index: 2000; display: flex; gap: 5px; }
+        .btn { padding: 10px 15px; cursor: pointer; background: #2ecc71; color: white; border: none; border-radius: 4px; font-weight: bold; }
+        .btn-reset { background: #3498db; }
+        #infos { position: fixed; top: 10px; right: 10px; background: white; padding: 8px; border-radius: 4px; z-index: 2000; border: 1px solid #ccc; font-size: 12px; }
+        .help { position: fixed; bottom: 10px; left: 10px; color: white; font-size: 11px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 3px; }
     </style>
 </head>
 <body>
 
-    <button class="btn-add" onclick="creerNote()">+ Ajouter une note</button>
-    <div id="infos">Mon ID Utilisateur : <b id="user-id-label">..</b></div>
-    
-    <div id="plateau"></div>
+    <div id="ui">
+        <button class="btn" onclick="creerNote()">+ Note</button>
+        <button class="btn btn-reset" onclick="resetVue()">Reset</button>
+    </div>
+    <div id="infos">ID: <b id="user-id">..</b> | Zoom: <b id="zoom-val">100%</b></div>
+    <div class="help">Clic Gauche (fond) : Naviguer | Clic Gauche (note) : Drag ou Texte | Clic Droit : Supprimer</div>
+
+    <div id="viewport">
+        <div id="plateau"></div>
+    </div>
 
     <script>
-        // Generation de l'ID utilisateur entre 10 et 99
-        const userId = Math.floor(Math.random() * (99 - 10) + 10);
-        document.getElementById('user-id-label').innerText = userId;
+        const userId = Math.floor(Math.random() * 90 + 10);
+        const maCouleur = `hsl(${userId * 3.6}, 70%, 85%)`;
+        document.getElementById('user-id').innerText = userId;
 
         const socket = new WebSocket('ws://localhost:3000');
         const plateau = document.getElementById('plateau');
 
+        let zoom = 1, panX = -4500, panY = -4500;
+        let isPanning = false, isDraggingNote = false;
+
+        function refresh() {
+            plateau.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+            document.getElementById('zoom-val').innerText = Math.round(zoom * 100) + "%";
+        }
+        refresh();
+
+        function resetVue() {
+            zoom = 1; panX = (window.innerWidth / 2) - 5000; panY = (window.innerHeight / 2) - 5000;
+            refresh();
+        }
+
+        window.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            const nextZoom = zoom * delta;
+            if (nextZoom > 0.1 && nextZoom < 4) {
+                panX = e.clientX - (e.clientX - panX) * delta;
+                panY = e.clientY - (e.clientY - panY) * delta;
+                zoom = nextZoom;
+                refresh();
+            }
+        }, { passive: false });
+
+        // Gestion du clic gauche
+        window.addEventListener('mousedown', (e) => {
+            if (e.button === 0) {
+                if (e.target.id === 'plateau' || e.target.id === 'viewport') {
+                    isPanning = true;
+                } else if (e.target.classList.contains('postit')) {
+                    isDraggingNote = true;
+                    initDragNote(e);
+                }
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (isPanning) {
+                panX += e.movementX;
+                panY += e.movementY;
+                refresh();
+            }
+            // Envoi du curseur
+            const wx = (e.clientX - panX) / zoom;
+            const wy = (e.clientY - panY) / zoom;
+            if (socket.readyState === 1) {
+                socket.send(JSON.stringify({ type: 'CURSEUR', auteur: userId, x: wx, y: wy }));
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            isPanning = false;
+            isDraggingNote = false;
+        });
+
+        function initDragNote(e) {
+            const el = e.target;
+            const startX = e.clientX, startY = e.clientY;
+            const initL = parseInt(el.style.left), initT = parseInt(el.style.top);
+
+            const onMove = (m) => {
+                if (!isDraggingNote) return;
+                const dx = (m.clientX - startX) / zoom;
+                const dy = (m.clientY - startY) / zoom;
+                const nx = initL + dx;
+                const ny = initT + dy;
+                el.style.left = nx + 'px';
+                el.style.top = ny + 'px';
+                envoyer(el.id, nx, ny, el.innerText, 'MAJ');
+            };
+
+            const onUp = () => {
+                window.removeEventListener('mousemove', onMove);
+                window.removeEventListener('mouseup', onUp);
+            };
+
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
+        }
+
+        // Suppression clic droit
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            if (e.target.classList.contains('postit')) {
+                if (confirm("Supprimer ?")) envoyer(e.target.id, 0, 0, "", 'SUPPRESSION');
+            }
+        });
+
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
-
-            // Gestion de la suppression visuelle
+            if (data.type === 'CURSEUR') {
+                let c = document.getElementById('cur-' + data.auteur);
+                if (!c) {
+                    c = document.createElement('div');
+                    c.id = 'cur-' + data.auteur; c.className = 'curseur';
+                    c.style.background = `hsl(${data.auteur * 3.6}, 70%, 50%)`;
+                    c.innerHTML = `<span>${data.auteur}</span>`;
+                    plateau.appendChild(c);
+                }
+                c.style.left = data.x + 'px'; c.style.top = data.y + 'px';
+                return;
+            }
             if (data.type === 'SUPPRESSION') {
                 const el = document.getElementById(data.idPostIt);
                 if (el) el.remove();
                 return;
             }
-
-            // Gestion creation ou mise a jour
-            let el = document.getElementById(data.idPostIt);
-            if (!el) {
-                el = document.createElement('div');
-                el.id = data.idPostIt;
-                el.className = 'postit';
-                el.contentEditable = true;
-                el.innerText = data.texte;
-                plateau.appendChild(el);
-            }
-
-            el.style.left = data.posX + 'px';
-            el.style.top = data.posY + 'px';
-
-            // Mise a jour du texte si l'auteur est different
-            if (data.auteur !== userId && el.innerText !== data.texte) {
-                el.innerText = data.texte;
+            if (data.type === 'MAJ') {
+                let el = document.getElementById(data.idPostIt);
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = data.idPostIt; el.className = 'postit';
+                    el.contentEditable = true; el.style.background = data.couleur;
+                    plateau.appendChild(el);
+                }
+                el.style.left = data.posX + 'px'; el.style.top = data.posY + 'px';
+                if (data.auteur !== userId) el.innerText = data.texte;
             }
         };
 
+        function envoyer(id, x, y, txt, type) {
+            socket.send(JSON.stringify({ type: type, idPostIt: id, auteur: userId, couleur: maCouleur, posX: x, posY: y, texte: txt }));
+        }
+
         function creerNote() {
-            const idUniqueNote = "note-" + Date.now() + "-" + userId;
-            envoyer(idUniqueNote, 100, 100, "Nouvelle note...");
+            const id = "note-" + Date.now() + "-" + userId;
+            const wx = (window.innerWidth/2 - panX) / zoom;
+            const wy = (window.innerHeight/2 - panY) / zoom;
+            envoyer(id, wx, wy, "...", 'MAJ');
         }
 
-        function envoyer(idNote, x, y, txt, type = 'MAJ') {
-            const message = {
-                type: type,
-                idPostIt: idNote,
-                auteur: userId,
-                posX: x,
-                posY: y,
-                texte: txt
-            };
-            if (socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify(message));
-            }
-        }
-
-        // Deplacement des notes
-        document.addEventListener('mousedown', (e) => {
-            if (e.target.classList.contains('postit')) {
-                const el = e.target;
-                const decalageX = e.clientX - el.offsetLeft;
-                const decalageY = e.clientY - el.offsetTop;
-
-                const glisser = (m) => {
-                    const x = m.clientX - decalageX;
-                    const y = m.clientY - decalageY;
-                    el.style.left = x + 'px';
-                    el.style.top = y + 'px';
-                    envoyer(el.id, x, y, el.innerText);
-                };
-
-                document.onmousemove = glisser;
-                document.onmouseup = () => { document.onmousemove = null; };
-            }
-        });
-
-        // Modification du texte
         document.addEventListener('input', (e) => {
             if (e.target.classList.contains('postit')) {
-                const el = e.target;
-                envoyer(el.id, parseInt(el.style.left), parseInt(el.style.top), el.innerText);
-            }
-        });
-
-        // Suppression par clic droit avec confirmation
-        document.addEventListener('contextmenu', (e) => {
-            if (e.target.classList.contains('postit')) {
-                e.preventDefault();
-                if (confirm("Voulez-vous vraiment supprimer cette note ?")) {
-                    envoyer(e.target.id, 0, 0, "", 'SUPPRESSION');
-                }
+                envoyer(e.target.id, parseInt(e.target.style.left), parseInt(e.target.style.top), e.target.innerText, 'MAJ');
             }
         });
     </script>
