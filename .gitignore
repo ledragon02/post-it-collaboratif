@@ -11,3 +11,6 @@ Thumbs.db
 
 # Fichiers de logs d'erreurs
 npm-debug.log*
+
+# Fichiers sauvegarde
+sauvegarde.json
