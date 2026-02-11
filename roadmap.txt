@@ -1,0 +1,41 @@
+1. Cahier des Charges 
+
+ Objectif du projet
+Créer une application web de "Brainstorming" en temps réel où plusieurs utilisateurs peuvent créer, éditer et déplacer des notes adhésives (post-its) sur un tableau infini.
+Spécifications Techniques
+Front-end : HTML5, CSS3, JavaScript (Vanilla).
+Back-end : Node.js avec la bibliothèque ws (WebSockets).
+Protocole : Échanges bidirectionnels en JSON via WebSocket sur le port 3000.
+Identification : Chaque utilisateur possède un userId (nombre à 2 chiffres) et chaque note possède un idPostIt unique (Timestamp + ID).
+ Fonctions Principales 
+Synchronisation en temps réel : Tout mouvement ou modification de texte doit être visible par tous sans rafraîchir la page.
+Persistance de session : Si un nouvel utilisateur se connecte, le serveur lui envoie l'état actuel du tableau.
+Édition collaborative : Le texte doit pouvoir être modifié par n'importe qui.
+
+2. Roadmap 
+Voici les 4 étapes pour professionnaliser ton application :
+
+Étape 1 : Stabilisation 
+[x] Connexion WebSocket de base.
+[x] Déplacement fluide (Drag & Drop).
+[x] Synchronisation du texte.
+[ ] À faire : Ajouter un bouton "Supprimer" sur chaque note.
+
+Étape 2 : Amélioration Visuelle & UX 
+
+Couleurs personnalisées : Chaque utilisateur a une couleur de post-it attribuée selon son ID.
+Curseurs distants : Voir où se trouve la souris des autres utilisateurs en temps réel.
+Interface (UI) : Rendre le tableau "infini" avec un système de zoom ou de défilement.
+
+Étape 3 : Persistance Réelle 
+
+Sauvegarde sur disque : Utiliser le module fs de Node.js pour écrire les notes dans un fichier data.json.
+Auto-save : Le serveur enregistre l'état toutes les 5 minutes ou à chaque modification importante.
+Restauration : Au démarrage du serveur, il recharge automatiquement les notes du fichier.
+
+Étape 4 : Fonctionnalités Avancées
+
+Authentification : Choisir un pseudo au lieu d'un ID aléatoire.
+Multi-tableaux : Possibilité de créer différentes "salles" de réunion avec des URLs différentes (ex: site.com/projet1).
+Export : Bouton pour exporter le tableau en image PNG ou en PDF.
+
