@@ -1,7 +1,7 @@
 1. Cahier des Charges 
 
  Objectif du projet
-Créer une application web de "Brainstorming" en temps réel où plusieurs utilisateurs peuvent créer, éditer et déplacer des notes adhésives (post-its) sur un tableau infini.
+Créer une application web de "Brainstorming" en temps réel où plusieurs utilisateurs peuvent créer, éditer et déplacer des post-its sur un tableau infini.
 Spécifications Techniques
 Front-end : HTML5, CSS3, JavaScript (Vanilla).
 Back-end : Node.js avec la bibliothèque ws (WebSockets).
@@ -19,7 +19,7 @@ Voici les 4 étapes pour professionnaliser ton application :
 [x] Connexion WebSocket de base.
 [x] Déplacement fluide (Drag & Drop).
 [x] Synchronisation du texte.
-[ ] À faire : Ajouter un bouton "Supprimer" sur chaque note.
+[x] Ajouter un bouton "Supprimer" sur chaque note.
 
 Étape 2 : Amélioration Visuelle & UX 
 
