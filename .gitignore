@@ -1,0 +1,13 @@
+# Dépendances Node (le plus important)
+node_modules/
+
+# Fichiers système (poubelle invisible)
+.DS_Store
+Thumbs.db
+
+# Fichiers de configuration d'éditeur (optionnel)
+.vscode/
+.idea/
+
+# Fichiers de logs d'erreurs
+npm-debug.log*

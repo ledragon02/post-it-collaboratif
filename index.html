@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Post-its avec Logs</title>
+    <style>
+        body { font-family: sans-serif; background: #dfe6e9; margin: 0; overflow: hidden; }
+        #plateau { width: 100vw; height: 100vh; position: relative; }
+        .postit { 
+            width: 150px; height: 150px; background: #ffeaa7; 
+            position: absolute; padding: 15px; box-shadow: 3px 3px 10px rgba(0,0,0,0.1);
+            cursor: grab; border: 1px solid #fab1a0; overflow: hidden;
+        }
+        #infos { position: fixed; top: 10px; right: 10px; background: white; padding: 10px; border-radius: 5px; z-index: 10; border: 1px solid #ccc; }
+        .btn-add { position: fixed; top: 10px; left: 10px; padding: 10px 20px; z-index: 10; cursor: pointer; background: #2ecc71; color: white; border: none; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <button class="btn-add" onclick="creerNote()">+ Créer une note</button>
+    <div id="infos">Mon ID : <b id="user-id-label">..</b></div>
+    <div id="plateau"></div>
+
+    <script>
+        // Génération de l'ID utilisateur entre 10 et 99
+        const userId = Math.floor(Math.random() * (99 - 10) + 10);
+        document.getElementById('user-id-label').innerText = userId;
+        console.log(" Session démarrée. Mon ID utilisateur est : " + userId);
+
+        const socket = new WebSocket('ws://localhost:3000');
+        const plateau = document.getElementById('plateau');
+
+        // LOG : Connexion réussie
+        socket.onopen = () => console.log(" Connecté au serveur WebSocket");
+
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            
+            // On logue la réception (seulement si ça vient des autres pour ne pas polluer)
+            if (data.auteur !== userId) {
+                console.log(` Reçu de l'utilisateur ${data.auteur} : Mise à jour note ${data.idPostIt}`);
+            }
+
+            let el = document.getElementById(data.idPostIt);
+            if (!el) {
+                console.log(` Création visuelle du post-it : ${data.idPostIt}`);
+                el = document.createElement('div');
+                el.id = data.idPostIt;
+                el.className = 'postit';
+                el.contentEditable = true;
+                el.innerText = data.texte;
+                plateau.appendChild(el);
+            }
+
+            el.style.left = data.posX + 'px';
+            el.style.top = data.posY + 'px';
+
+            if (data.auteur !== userId && el.innerText !== data.texte) {
+                el.innerText = data.texte;
+            }
+        };
+
+        function creerNote() {
+            const idUniqueNote = "note-" + Date.now() + "-" + userId;
+            console.log(" Tentative de création d'une note : " + idUniqueNote);
+            envoyer(idUniqueNote, 50, 50, "Nouvelle note...");
+        }
+
+        function envoyer(idNote, x, y, txt) {
+            const message = {
+                idPostIt: idNote,
+                auteur: userId,
+                posX: x,
+                posY: y,
+                texte: txt
+            };
+            socket.send(JSON.stringify(message));
+        }
+
+        // Logs de mouvement
+        document.addEventListener('mousedown', (e) => {
+            if (e.target.classList.contains('postit')) {
+                const el = e.target;
+                console.log(" Déplacement de la note : " + el.id);
+                const glisser = (m) => {
+                    const x = m.clientX - 75;
+                    const y = m.clientY - 75;
+                    el.style.left = x + 'px';
+                    el.style.top = y + 'px';
+                    envoyer(el.id, x, y, el.innerText);
+                };
+                document.onmousemove = glisser;
+                document.onmouseup = () => { 
+                    document.onmousemove = null;
+                    console.log(" Note relâchée à x:" + el.style.left + " y:" + el.style.top);
+                };
+            }
+        });
+
+        // Log de texte
+        document.addEventListener('input', (e) => {
+            if (e.target.classList.contains('postit')) {
+                envoyer(e.target.id, parseInt(e.target.style.left), parseInt(e.target.style.top), e.target.innerText);
+            }
+        });
+    </script>
+</body>
+</html>
