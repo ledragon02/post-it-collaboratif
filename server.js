@@ -15,27 +15,28 @@ if (fs.existsSync(FICHIER_SAUVEGARDE)) {
 }
 
 wss.on('connection', (ws) => {
-    Object.values(memoirePostIts).forEach(note => ws.send(JSON.stringify(note)));
+    // Envoyer l'état complet au chargement
+    Object.values(memoirePostIts).forEach(item => ws.send(JSON.stringify(item)));
 
     ws.on('message', (msg) => {
         const data = JSON.parse(msg);
+        const id = data.idPostIt || data.idLien;
+
         if (data.type === 'SUPPRESSION') {
-            delete memoirePostIts[data.idPostIt];
-            console.log(`Action : Suppression de ${data.idPostIt}`);
-        } else if (data.type === 'MAJ') {
-            memoirePostIts[data.idPostIt] = data;
-            console.log(`Action : MAJ ${data.idPostIt} -> X: ${Math.round(data.posX)}, Y: ${Math.round(data.posY)}`);
+            delete memoirePostIts[id];
+        } else if (['MAJ', 'IMAGE', 'LIEN'].includes(data.type)) {
+            // FUSION INTELLIGENTE : préserve les coordonnées si on ne met à jour que le texte
+            memoirePostIts[id] = { ...(memoirePostIts[id] || {}), ...data };
         }
         
         if (data.type !== 'CURSEUR') {
             fs.writeFileSync(FICHIER_SAUVEGARDE, JSON.stringify(memoirePostIts, null, 2));
         }
 
-        const diffusion = JSON.stringify(data);
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
                 if (data.type === 'CURSEUR' && client === ws) return;
-                client.send(diffusion);
+                client.send(JSON.stringify(data));
             }
         });
     });
