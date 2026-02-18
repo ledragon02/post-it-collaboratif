@@ -7,41 +7,36 @@ const wss = new WebSocket.Server({ port: PORT });
 
 let memoirePostIts = {};
 
-function chargerDonnees() {
-    if (fs.existsSync(FICHIER_SAUVEGARDE)) {
-        try {
-            const contenu = fs.readFileSync(FICHIER_SAUVEGARDE, 'utf-8');
-            memoirePostIts = JSON.parse(contenu);
-            console.log("Systeme : Donnees restaurees");
-        } catch (e) { memoirePostIts = {}; }
-    }
+if (fs.existsSync(FICHIER_SAUVEGARDE)) {
+    try {
+        memoirePostIts = JSON.parse(fs.readFileSync(FICHIER_SAUVEGARDE, 'utf-8'));
+        console.log("Système : Données chargées.");
+    } catch (e) { memoirePostIts = {}; }
 }
-
-function sauvegarderDonnees() {
-    fs.writeFileSync(FICHIER_SAUVEGARDE, JSON.stringify(memoirePostIts, null, 2));
-}
-
-chargerDonnees();
 
 wss.on('connection', (ws) => {
     Object.values(memoirePostIts).forEach(note => ws.send(JSON.stringify(note)));
+
     ws.on('message', (msg) => {
         const data = JSON.parse(msg);
         if (data.type === 'SUPPRESSION') {
-            console.log("Action : Suppression de la note " + data.idPostIt);
             delete memoirePostIts[data.idPostIt];
-            sauvegarderDonnees();
+            console.log(`Action : Suppression de ${data.idPostIt}`);
         } else if (data.type === 'MAJ') {
-            console.log("Action : Mise a jour de la note " + data.idPostIt);
             memoirePostIts[data.idPostIt] = data;
-            sauvegarderDonnees();
+            console.log(`Action : MAJ ${data.idPostIt} -> X: ${Math.round(data.posX)}, Y: ${Math.round(data.posY)}`);
         }
+        
+        if (data.type !== 'CURSEUR') {
+            fs.writeFileSync(FICHIER_SAUVEGARDE, JSON.stringify(memoirePostIts, null, 2));
+        }
+
+        const diffusion = JSON.stringify(data);
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
                 if (data.type === 'CURSEUR' && client === ws) return;
-                client.send(JSON.stringify(data));
+                client.send(diffusion);
             }
         });
     });
 });
-console.log("Serveur pret sur le port " + PORT);
