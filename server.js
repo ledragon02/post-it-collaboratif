@@ -6,55 +6,103 @@ const FICHIER_SAUVEGARDE = 'sauvegarde.json';
 const wss = new WebSocket.Server({ port: PORT });
 
 let memoirePostIts = {};
+let historiqueChat = [];
+const MAX_CHAT_LOGS = 100;
 
+// --- CHARGEMENT DES DONNÉES ---
 if (fs.existsSync(FICHIER_SAUVEGARDE)) {
     try {
-        memoirePostIts = JSON.parse(fs.readFileSync(FICHIER_SAUVEGARDE, 'utf-8'));
-        console.log(">> Système : Données chargées.");
-    } catch (e) { memoirePostIts = {}; }
+        const data = JSON.parse(fs.readFileSync(FICHIER_SAUVEGARDE, 'utf-8'));
+        memoirePostIts = data.notes || {};
+        historiqueChat = data.chat || [];
+        console.log(">> [SYSTÈME] Données et historique chargés.");
+    } catch (e) { 
+        console.log(">> [ERREUR] Erreur de lecture, base vide.");
+        memoirePostIts = {}; 
+        historiqueChat = [];
+    }
 }
 
 function diffuserNombreUtilisateurs() {
-    const nb = wss.clients.size;
-    const msg = JSON.stringify({ type: 'NB_UTILISATEURS', count: nb });
-    wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) client.send(msg);
+    const msg = JSON.stringify({ 
+        type: 'NB_UTILISATEURS', 
+        count: wss.clients.size 
     });
-    console.log(`>> Système : ${nb} utilisateur(s) connecté(s).`);
+    wss.clients.forEach(c => { 
+        if (c.readyState === WebSocket.OPEN) {
+            c.send(msg); 
+        }
+    });
+}
+
+function sauvegarder() {
+    const data = { 
+        notes: memoirePostIts, 
+        chat: historiqueChat 
+    };
+    fs.writeFileSync(FICHIER_SAUVEGARDE, JSON.stringify(data, null, 2));
 }
 
 wss.on('connection', (ws) => {
-    Object.values(memoirePostIts).forEach(note => ws.send(JSON.stringify(note)));
+    // Envoyer l'existant au nouveau client
+    Object.values(memoirePostIts).forEach(note => {
+        ws.send(JSON.stringify(note));
+    });
+    
+    historiqueChat.forEach(msg => {
+        ws.send(JSON.stringify(msg));
+    });
+    
     diffuserNombreUtilisateurs();
+    console.log(`>> [CONNEXION] Utilisateur connecté. Total : ${wss.clients.size}`);
 
     ws.on('message', (msg) => {
         const data = JSON.parse(msg);
         const id = data.idPostIt || data.idLien;
         const auteur = data.auteur || "Anonyme";
 
-        if (data.type === 'SUPPRESSION') {
-            delete memoirePostIts[id];
-            console.log(`[SUPPRESSION] ${id} par ${auteur}`);
-        } 
-        else if (data.type === 'MAJ' || data.type === 'IMAGE' || data.type === 'LIEN') {
-            if (data.type === 'MAJ' && !memoirePostIts[id]) {
-                console.log(`[CRÉATION] Note par ${auteur}`);
-            }
-            
-            memoirePostIts[id] = { ...(memoirePostIts[id] || {}), ...data };
-            
-            if (data.type === 'MAJ' && data.posX !== undefined) {
+        // --- GESTION DES MESSAGES ---
+        if (data.type === 'MAJ' || data.type === 'IMAGE') {
+            if (!memoirePostIts[id]) {
+                console.log(`[CRÉATION] ${auteur} a créé ${id}`);
+            } else if (data.posX !== undefined) {
                 console.log(`[MAJ] ${auteur} déplace ${id} (X: ${Math.round(data.posX)}, Y: ${Math.round(data.posY)})`);
             }
-            if (data.type === 'LIEN') console.log(`[LIEN] ${auteur} a relié deux notes`);
-        }
+            memoirePostIts[id] = { ...(memoirePostIts[id] || {}), ...data };
+            sauvegarder();
+        } 
         
-        if (data.type !== 'CURSEUR') {
-            fs.writeFileSync(FICHIER_SAUVEGARDE, JSON.stringify(memoirePostIts, null, 2));
+        else if (data.type === 'CHAT') {
+            historiqueChat.push(data);
+            if (historiqueChat.length > MAX_CHAT_LOGS) {
+                historiqueChat.shift();
+            }
+            console.log(`[CHAT] ${auteur}: ${data.message}`);
+            sauvegarder();
         }
 
+        else if (data.type === 'CLEAR_CHAT') {
+            historiqueChat = [];
+            console.log(`[SYSTÈME] Chat vidé par ${auteur}`);
+            sauvegarder();
+        }
+
+        else if (data.type === 'LIEN') {
+            memoirePostIts[id] = data;
+            console.log(`[LIEN] ${auteur} a relié des éléments`);
+            sauvegarder();
+        }
+
+        else if (data.type === 'SUPPRESSION') {
+            delete memoirePostIts[id];
+            console.log(`[SUPPRESSION] ${id} par ${auteur}`);
+            sauvegarder();
+        }
+
+        // --- DIFFUSION ---
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
+                // Ne pas renvoyer son propre curseur
                 if (data.type === 'CURSEUR' && client === ws) return;
                 client.send(JSON.stringify(data));
             }
